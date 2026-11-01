@@ -1,4 +1,8 @@
-from pydantic import BaseModel, Field, field_validator
+from __future__ import annotations
+
+from typing import Literal
+
+from pydantic import BaseModel, model_validator
 
 
 def clean_text(value: str, *, max_length: int, label: str) -> str:
@@ -11,10 +15,16 @@ def clean_text(value: str, *, max_length: int, label: str) -> str:
 
 
 class ClientPacket(BaseModel):
-    type: str
-    content: str = Field(default="")
+    type: Literal["chat", "agent.dm", "agent.stop"]
+    content: str = ""
+    threadId: str | None = None
+    taskId: str | None = None
 
-    @field_validator("content")
-    @classmethod
-    def validate_content(cls, value: str) -> str:
-        return clean_text(value, max_length=2000, label="消息")
+    @model_validator(mode="after")
+    def validate_payload(self) -> "ClientPacket":
+        if self.type == "agent.stop":
+            if not (self.taskId or "").strip():
+                raise ValueError("缺少 taskId")
+            return self
+        self.content = clean_text(self.content, max_length=2000, label="消息")
+        return self

@@ -56,16 +56,66 @@ python -m pip install -r backend/requirements-dev.txt
 python -m pytest backend/tests -q
 ```
 
+## 智能体入口
+
+应用内置一个常驻智能体（默认名「小深」），采用 Router + Worker 双层结构：
+
+- 在房间消息里发送 `@小深 帮我看下 backend/main.py`，或点击输入框左侧的 `@` 按钮；
+- 右侧 Agent 面板可以直接私聊、查看任务状态与执行步骤、停止任务；
+- Router 负责对话与分派，Worker 在独立上下文中并发执行，互不阻塞；
+- 同一会话线程的后续消息会直通已订阅的 Worker，不再重复经过 Router。
+
+首次使用需要配置模型密钥：
+
+```powershell
+Copy-Item .env.example .env
+# 编辑 .env，填写 LLM_API_KEY=sk-...
+```
+
+未配置密钥时进入演示模式：前后端链路仍可跑通，但只会返回配置提示。`.env` 已被 `.gitignore` 忽略。
+
+### 配置项
+
+| 变量 | 默认值 | 说明 |
+| --- | --- | --- |
+| `LLM_API_KEY` | 空 | DeepSeek 或任意 OpenAI 兼容服务的密钥 |
+| `LLM_BASE_URL` | `https://api.deepseek.com` | 兼容接口地址（含 `/v1` 亦可） |
+| `AGENT_NAME` | `小深` | 智能体昵称，同时作为 @ 触发词 |
+| `ROUTER_MODEL` | `deepseek-chat` | Router 层模型 |
+| `WORKER_MODEL` | `deepseek-chat` | Worker 层模型 |
+| `MAX_WORKERS` | `3` | 并行 Worker 上限 |
+| `MAX_STEPS` | `8` | 单个 Worker 的最大工具调用轮数 |
+| `AGENT_ALLOW_WRITE` | `true` | 是否允许 Worker 写工作区文件 |
+
+Worker 可用工具：读取会话/消息/任务、列出目录、读取文件、写入文件。写入范围限制在项目目录内，`.git`、`.env`、`.venv`、`node_modules`、`tools` 等路径被拒绝。
+
+### 当前限制
+
+- 会话与任务保存在进程内，服务重启后丢失（P2 计划迁移到 SQLite）；
+- 尚无 Watchdog 与投机执行（P3）；
+- 无用户鉴权，私聊线程按连接标识隔离，重连后历史不可恢复。
+
 ## WebSocket 协议
 
 连接 `/ws?nickname=昵称`。客户端发送 `{ "type": "chat", "content": "消息" }`；服务端发送 `ready`、`chat`、`presence`、`error` 事件。昵称长度为 1–20，消息长度为 1–2000，均按纯文本处理。
 
-## 机器人前端演示
+智能体相关扩展：
 
-在多人聊天室中发送 `@机器人 你的问题` 或 `@AI 你的问题`，发送者会在自己的浏览器中看到模拟机器人的回复；输入“@机器人 搜索 Vue”可查看模拟工具状态。普通消息仍会广播给聊天室。模拟机器人的回复不会发送到服务器，也不会显示给其他成员。
+```jsonc
+// 客户端
+{ "type": "agent.dm", "content": "帮我写个脚本" }
+{ "type": "agent.stop", "taskId": "task_xxx" }
 
-未来需要后端接入大模型和工具，将机器人消息作为共享事件广播，并与前端约定消息和工具事件格式。当前模拟逻辑在 `frontend/src/chatService.js` 和 `frontend/src/composables/useChat.js`，不能代替真实接入。不要在前端保存模型密钥。
+// 服务端
+{ "type": "agent.message", ... }   // 私聊消息回显
+{ "type": "agent.delta", ... }     // 流式增量
+{ "type": "agent.state", ... }     // 任务状态
+{ "type": "agent.trace", ... }     // Worker 工具调用记录
+{ "type": "agent.done", ... }      // 最终回复
+{ "type": "agent.error", ... }     // 智能体错误
+```
 
-前端测试：`node --test frontend/tests/*.test.js`。
 
-前后端对接和待确认事项见 [机器人对接说明](docs/bot-integration.md)。
+## 前后端对接
+
+智能体集成现状、事件与验证范围见 [机器人对接说明](docs/bot-integration.md)。

@@ -32,6 +32,17 @@ class ConnectionManager:
     async def send(self, client: Client, packet: dict) -> None:
         await client.socket.send_json(packet)
 
+    async def send_to(self, user_id: str, packet: dict) -> bool:
+        client = self.connections.get(user_id)
+        if client is None:
+            return False
+        try:
+            await client.socket.send_json(packet)
+            return True
+        except Exception:
+            self.remove(user_id)
+            return False
+
     async def broadcast(self, packet: dict) -> None:
         stale: list[str] = []
         for user_id, client in list(self.connections.items()):

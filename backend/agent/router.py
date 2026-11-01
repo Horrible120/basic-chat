@@ -16,6 +16,11 @@ DISPATCH_TOOL = {
             "properties": {
                 "title": {"type": "string", "description": "任务标题，20 字以内"},
                 "instruction": {"type": "string", "description": "完整、可独立执行的任务说明"},
+                "complexity": {
+                    "type": "string",
+                    "enum": ["light", "heavy"],
+                    "description": "light：单文件或小改动；heavy：重构、多文件、调试或长链路任务",
+                },
             },
             "required": ["title", "instruction"],
             "additionalProperties": False,
@@ -70,6 +75,8 @@ class Router:
             tools=[DISPATCH_TOOL],
             temperature=self.config.temperature,
             max_tokens=self.config.router_max_tokens,
+            thinking=self.config.router_thinking,
+            reasoning_effort=self.config.reasoning_effort,
         ):
             if event.kind == "delta" and event.text:
                 streamed = True
@@ -82,12 +89,13 @@ class Router:
             args = dispatch.parsed()
             title = str(args.get("title") or "未命名任务").strip()[:80]
             instruction = str(args.get("instruction") or trigger.content).strip()[:4000]
+            complexity = "heavy" if str(args.get("complexity") or "").lower() == "heavy" else "light"
             content = (result.content or "").strip()
             if not streamed and not content:
                 content = f"收到，我来处理：{title}"
             if content or streamed:
                 await self.runtime.emit_reply(trigger, message_id, content or "收到，我来处理。")
-            await self.runtime.start_task(trigger, title, instruction)
+            await self.runtime.start_task(trigger, title, instruction, complexity)
             return
 
         content = (result.content or "").strip()

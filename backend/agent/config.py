@@ -44,13 +44,22 @@ def _float(name: str, default: float) -> float:
         return default
 
 
+def _thinking(name: str, default: str) -> str:
+    value = (os.getenv(name, "").strip().lower() or default)
+    return value if value in {"enabled", "disabled"} else default
+
+
 @dataclass(frozen=True, slots=True)
 class AgentConfig:
     name: str = "小深"
     api_key: str = ""
     base_url: str = "https://api.deepseek.com"
-    router_model: str = "deepseek-chat"
-    worker_model: str = "deepseek-chat"
+    router_model: str = "deepseek-flash"
+    worker_model: str = "deepseek-flash"
+    worker_model_heavy: str = "deepseek-v4-pro"
+    router_thinking: str = "disabled"
+    worker_thinking: str = "enabled"
+    reasoning_effort: str = "high"
     temperature: float = 0.3
     router_max_tokens: int = 400
     worker_max_tokens: int = 1600
@@ -63,6 +72,14 @@ class AgentConfig:
     rate_limit: int = 12
     rate_window: float = 60.0
     allow_write: bool = True
+    dsh_enabled: bool = False
+    dsh_command: str = "dsh"
+    dsh_profile: str = "headless"
+    dsh_provider: str = "deepseek-official"
+    dsh_base_url: str = ""
+    dsh_extra_args: str = ""
+    dsh_timeout: float = 1800.0
+    dsh_home: str = ""
 
     @classmethod
     def from_env(cls) -> "AgentConfig":
@@ -71,8 +88,12 @@ class AgentConfig:
             name=(os.getenv("AGENT_NAME", "小深").strip() or "小深"),
             api_key=os.getenv("LLM_API_KEY", "").strip(),
             base_url=(os.getenv("LLM_BASE_URL", "https://api.deepseek.com").strip() or "https://api.deepseek.com"),
-            router_model=os.getenv("ROUTER_MODEL", "deepseek-chat").strip() or "deepseek-chat",
-            worker_model=os.getenv("WORKER_MODEL", "deepseek-chat").strip() or "deepseek-chat",
+            router_model=os.getenv("ROUTER_MODEL", "deepseek-flash").strip() or "deepseek-flash",
+            worker_model=os.getenv("WORKER_MODEL", "deepseek-flash").strip() or "deepseek-flash",
+            worker_model_heavy=os.getenv("WORKER_MODEL_HEAVY", "deepseek-v4-pro").strip() or "deepseek-v4-pro",
+            router_thinking=_thinking("ROUTER_THINKING", "disabled"),
+            worker_thinking=_thinking("WORKER_THINKING", "enabled"),
+            reasoning_effort=os.getenv("REASONING_EFFORT", "high").strip() or "high",
             temperature=_float("LLM_TEMPERATURE", 0.3),
             router_max_tokens=_int("ROUTER_MAX_TOKENS", 400),
             worker_max_tokens=_int("WORKER_MAX_TOKENS", 1600),
@@ -85,6 +106,14 @@ class AgentConfig:
             rate_limit=max(1, _int("RATE_LIMIT", 12)),
             rate_window=max(1.0, _float("RATE_WINDOW", 60.0)),
             allow_write=_bool("AGENT_ALLOW_WRITE", True),
+            dsh_enabled=_bool("HARNESS_ENABLED", False),
+            dsh_command=os.getenv("HARNESS_COMMAND", "dsh").strip() or "dsh",
+            dsh_profile=os.getenv("HARNESS_PROFILE", "headless").strip() or "headless",
+            dsh_provider=os.getenv("HARNESS_PROVIDER", "deepseek-official").strip() or "deepseek-official",
+            dsh_base_url=os.getenv("HARNESS_BASE_URL", "").strip(),
+            dsh_extra_args=os.getenv("HARNESS_EXTRA_ARGS", "").strip(),
+            dsh_timeout=max(30.0, _float("HARNESS_TIMEOUT", 1800.0)),
+            dsh_home=os.getenv("HARNESS_HOME", "").strip(),
         )
 
     @property

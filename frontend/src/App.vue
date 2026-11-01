@@ -124,7 +124,7 @@ function taskStatusLabel(value) {
           <div class="agent-avatar">深</div>
           <div class="agent-title">
             <strong>{{ agent.name }}</strong>
-            <span>Super-agent · Router + Worker</span>
+            <span>Super-agent · Router + {{ agent.backend === 'dsh' ? 'Harness' : 'Worker' }}</span>
           </div>
           <span :class="['status-dot', agent.online ? 'connected' : '']"></span>
         </header>

@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
+import sys
 from pathlib import Path
 
 from backend.agent.config import AgentConfig, ROOT
 from backend.agent.context import build_router_messages
+from backend.agent.dsh import DshBackend
 from backend.agent.filters import TriggerBuilder
 from backend.agent.llm import BaseLLM, LLMEvent, LLMResult, ToolCall
 from backend.agent.runtime import AgentRuntime
@@ -19,8 +22,14 @@ class ScriptedLLM(BaseLLM):
         self.results = list(results)
         self.calls: list[dict] = []
 
-    async def stream(self, messages, *, model, tools=None, temperature=0.3, max_tokens=1024):
-        self.calls.append({"model": model, "messages": messages, "tools": tools})
+    async def stream(self, messages, *, model, tools=None, temperature=0.3, max_tokens=1024, thinking=None, reasoning_effort=None):
+        self.calls.append({
+            "model": model,
+            "messages": messages,
+            "tools": tools,
+            "thinking": thinking,
+            "reasoning_effort": reasoning_effort,
+        })
         result = self.results.pop(0) if self.results else LLMResult(content="好的。")
         for index in range(0, len(result.content), 6):
             yield LLMEvent("delta", text=result.content[index:index + 6])
@@ -28,7 +37,7 @@ class ScriptedLLM(BaseLLM):
 
 
 class SlowLLM(BaseLLM):
-    async def stream(self, messages, *, model, tools=None, temperature=0.3, max_tokens=1024):
+    async def stream(self, messages, *, model, tools=None, temperature=0.3, max_tokens=1024, thinking=None, reasoning_effort=None):
         await asyncio.sleep(5)
         yield LLMEvent("final", result=LLMResult(content="太慢了"))
 
@@ -122,7 +131,11 @@ def test_router_dispatches_and_worker_finishes():
                         ToolCall(
                             id="call_1",
                             name="dispatch_task",
-                            arguments=json.dumps({"title": "查看结构", "instruction": "读一下 README"}),
+                            arguments=json.dumps({
+                                "title": "查看结构",
+                                "instruction": "读一下 README",
+                                "complexity": "heavy",
+                            }),
                         )
                     ],
                 ),
@@ -130,7 +143,17 @@ def test_router_dispatches_and_worker_finishes():
             ]
         )
         manager = FakeManager()
-        runtime = AgentRuntime(AgentConfig(name="小深", max_workers=2), manager, llm=llm)
+        runtime = AgentRuntime(
+            AgentConfig(
+                name="小深",
+                max_workers=2,
+                router_model="deepseek-flash",
+                worker_model="deepseek-flash",
+                worker_model_heavy="deepseek-v4-pro",
+            ),
+            manager,
+            llm=llm,
+        )
         await runtime.start()
         client = FakeClient()
         message = runtime.record_room_message(
@@ -147,11 +170,12 @@ def test_router_dispatches_and_worker_finishes():
             list(manager.broadcasted),
             len(llm.calls),
             bool(llm.calls and llm.calls[-1]["tools"]),
+            [{"model": call["model"], "thinking": call["thinking"]} for call in llm.calls],
         )
         await runtime.stop()
         return snapshot
 
-    task_results, broadcasted, call_count, worker_tools = asyncio.run(scenario())
+    task_results, broadcasted, call_count, worker_tools, calls = asyncio.run(scenario())
     assert len(task_results) == 1
     assert task_results[0] == ("done", "README 已看完，没问题。")
 
@@ -160,6 +184,8 @@ def test_router_dispatches_and_worker_finishes():
     assert any(packet["content"] == "README 已看完，没问题。" for packet in ack)
     assert call_count == 2
     assert worker_tools is True
+    assert calls[0] == {"model": "deepseek-flash", "thinking": "disabled"}
+    assert calls[1] == {"model": "deepseek-v4-pro", "thinking": "enabled"}
 
 
 def test_router_replies_directly_without_task():
@@ -212,3 +238,84 @@ def test_stop_running_task():
     assert status == "stopped"
     assert any(packet.get("type") == "agent.done" and "停止" in packet.get("content", "") for packet in packets)
     assert any(packet.get("type") == "agent.state" and packet.get("status") == "stopped" for packet in packets)
+
+
+def test_dsh_backend_detection():
+    disabled = DshBackend(AgentConfig(dsh_enabled=False, dsh_command=sys.executable))
+    assert disabled.available() is False
+    missing = DshBackend(AgentConfig(dsh_enabled=True, dsh_command="definitely-not-a-real-dsh-binary"))
+    assert missing.available() is False
+    present = DshBackend(AgentConfig(dsh_enabled=True, dsh_command=sys.executable))
+    assert present.available() is True
+
+
+def test_env_example_avoids_reserved_dsh_prefix():
+    text = (ROOT / ".env.example").read_text(encoding="utf-8")
+    reserved = [line for line in text.splitlines() if line.startswith("DSH_")]
+    assert reserved == []
+
+
+def test_worker_uses_dsh_backend(tmp_path: Path):
+    fake = tmp_path / "fake_dsh.py"
+    fake.write_text(
+        "import json, sys\n"
+        "task = sys.stdin.read()\n"
+        "events = [\n"
+        "  {'type': 'session', 'sessionId': 'session-fake-1'},\n"
+        "  {'type': 'text', 'text': 'working'},\n"
+        "  {'type': 'tool_call', 'name': 'read', 'arguments': {'path': 'README.md'}},\n"
+        "  {'type': 'final', 'text': 'task done'},\n"
+        "]\n"
+        "for event in events:\n"
+        "    print(json.dumps(event), flush=True)\n",
+        encoding="utf-8",
+    )
+    if os.name == "nt":
+        command = tmp_path / "fake_dsh.cmd"
+        command.write_text(f'@echo off\r\n"{sys.executable}" "{fake}" %*\r\n', encoding="ascii")
+    else:
+        command = tmp_path / "fake_dsh.sh"
+        command.write_text(f'#!/bin/sh\nexec "{sys.executable}" "{fake}" "$@"\n', encoding="utf-8")
+        command.chmod(0o755)
+
+    async def scenario():
+        llm = ScriptedLLM(
+            [
+                LLMResult(
+                    tool_calls=[
+                        ToolCall(
+                            id="call_1",
+                            name="dispatch_task",
+                            arguments=json.dumps({"title": "跑任务", "instruction": "用 Harness 执行", "complexity": "heavy"}),
+                        )
+                    ],
+                )
+            ]
+        )
+        config = AgentConfig(
+            name="小深",
+            dsh_enabled=True,
+            dsh_command=str(command),
+            dsh_timeout=30,
+            worker_model="deepseek-flash",
+            worker_model_heavy="deepseek-v4-pro",
+        )
+        runtime = AgentRuntime(config, FakeManager(), llm=llm)
+        await runtime.start()
+        message = runtime.record_room_message(user_id="u1", nickname="小雨", content="@小深 跑一下", message_id="m1")
+        await runtime.on_room_message(FakeClient(), message.content, message.id)
+        for _ in range(400):
+            tasks = list(runtime.store.tasks.values())
+            if tasks and tasks[0].status in {"done", "failed", "stopped"}:
+                break
+            await asyncio.sleep(0.01)
+        task = list(runtime.store.tasks.values())[0]
+        snapshot = (task.status, task.result, task.dsh_session_id, len(llm.calls))
+        await runtime.stop()
+        return snapshot
+
+    status, result, session_id, calls = asyncio.run(scenario())
+    assert status == "done"
+    assert result == "task done"
+    assert session_id == "session-fake-1"
+    assert calls == 1  # Router 调用一次；Worker 走 Harness

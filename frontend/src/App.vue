@@ -1,24 +1,59 @@
 <script setup>
 import { computed, nextTick, ref } from 'vue'
 import { useChat } from './composables/useChat'
+import { insertMention, mentionQuery } from './mention'
 
 const {
-  nickname, messages, onlineCount, status, statusLabel, error, userId,
+  nickname, messages, onlineCount, members, status, statusLabel, error, userId,
   agent, agentMessages, agentDraft, agentError, taskList, activeTasks,
   roomStreams, agentStreams,
   connect, send, sendAgent, stopTask, disconnect,
 } = useChat()
 
 const draft = ref('')
+const composerInput = ref(null)
+const mentionOpen = ref(false)
+const mentionRange = ref(null)
+const mentionOptions = computed(() => {
+  const query = (mentionRange.value?.query || '').toLowerCase()
+  return [{ userId: 'agent', nickname: agent.name, isAgent: true }, ...members.value.filter(member => member.userId !== userId.value && member.nickname)]
+    .filter(member => member.nickname.toLowerCase().includes(query))
+})
 const joined = computed(() => status.value === 'connected' || status.value === 'connecting' || status.value === 'disconnected')
 
 function join() { connect(nickname.value) }
 function submit() { if (send(draft.value)) draft.value = ''; nextTick(() => document.querySelector('.composer textarea')?.focus()) }
-function onKeydown(event) { if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { event.preventDefault(); submit() } }
-function mentionAgent() {
-  const marker = `@${agent.name}`
-  if (!draft.value.includes(marker)) draft.value = `${marker} ${draft.value}`
-  nextTick(() => document.querySelector('.composer textarea')?.focus())
+function onKeydown(event) { if (event.key === 'Escape' && mentionOpen.value) { mentionOpen.value = false; event.preventDefault(); return } if (event.key === 'Enter' && !event.shiftKey && !event.isComposing) { if (mentionOpen.value && mentionOptions.value.length) { event.preventDefault(); selectMention(mentionOptions.value[0]); return } event.preventDefault(); submit() } }
+function updateMentionQuery(event) {
+  mentionRange.value = mentionQuery(draft.value, event.target.selectionStart)
+  mentionOpen.value = !!mentionRange.value
+}
+function openMentionMenu() {
+  if (status.value !== 'connected') return
+  mentionRange.value = null
+  mentionOpen.value = !mentionOpen.value
+}
+function selectMention(member) {
+  const textarea = composerInput.value
+  const range = mentionRange.value
+  const start = range?.start ?? textarea?.selectionStart ?? draft.value.length
+  const end = range?.end ?? textarea?.selectionEnd ?? start
+  const next = insertMention(draft.value, member.nickname, start, end)
+  draft.value = next.text
+  mentionOpen.value = false
+  mentionRange.value = null
+  nextTick(() => { textarea?.focus(); textarea?.setSelectionRange(next.cursor, next.cursor) })
+}
+function mentionPerson(name) {
+  if (status.value !== 'connected' || !name) return
+  const textarea = composerInput.value
+  const start = textarea?.selectionStart ?? draft.value.length
+  const end = textarea?.selectionEnd ?? start
+  const next = insertMention(draft.value, name, start, end)
+  mentionOpen.value = false
+  mentionRange.value = null
+  draft.value = next.text
+  nextTick(() => { textarea?.focus(); textarea?.setSelectionRange(next.cursor, next.cursor) })
 }
 function submitAgent() {
   if (sendAgent(agentDraft.value)) agentDraft.value = ''
@@ -54,14 +89,14 @@ function taskStatusLabel(value) {
         </header>
         <div class="sub-header">
           <span>{{ statusLabel }}</span>
-          <span class="agent-hint">@{{ agent.name }} 可呼叫智能体</span>
+          <span class="agent-hint">输入 @ 或点击按钮选择在线成员</span>
           <button v-if="status === 'disconnected'" class="link-button" @click="connect()">重新连接</button>
           <button class="link-button leave" @click="disconnect">离开</button>
         </div>
         <div class="messages" aria-live="polite">
           <div v-if="!messages.length && !roomStreams.length" class="empty-state"><span>✦</span><p>还没有消息，先打个招呼吧。</p></div>
           <article v-for="message in messages" :key="message.id" :class="['message', { mine: message.userId === userId, agent: message.isAgent }]">
-            <div class="message-meta"><strong>{{ message.nickname }}</strong><time>{{ timeLabel(message.timestamp) }}</time></div>
+            <div class="message-meta"><button v-if="message.userId !== userId && !message.isAgent" type="button" class="mention-name" :disabled="status !== 'connected'" :aria-label="`提及 ${message.nickname}`" :title="`@${message.nickname}`" @click="mentionPerson(message.nickname)">{{ message.nickname }}</button><strong v-else>{{ message.nickname }}</strong><time>{{ timeLabel(message.timestamp) }}</time></div>
             <p>{{ message.content }}</p>
           </article>
           <article v-for="stream in roomStreams" :key="stream.id" class="message agent streaming">
@@ -70,8 +105,15 @@ function taskStatusLabel(value) {
           </article>
         </div>
         <form class="composer" @submit.prevent="submit">
-          <button type="button" class="mention-button" title="呼叫智能体" @click="mentionAgent">@</button>
-          <textarea v-model="draft" maxlength="2000" rows="2" placeholder="说点什么…（Enter 发送，Shift + Enter 换行）" :disabled="status !== 'connected'" @keydown="onKeydown"></textarea>
+          <div v-if="mentionOpen" class="mention-menu" role="group" aria-label="选择要提及的成员">
+            <div class="mention-menu-title">提及成员</div>
+            <button v-for="member in mentionOptions" :key="member.userId" type="button" class="mention-option" @mousedown.prevent @click="selectMention(member)">
+              <span class="mention-avatar">{{ member.nickname.slice(0, 1) }}</span><span>{{ member.nickname }}</span><small>{{ member.isAgent ? '智能体' : '在线 · ' + member.userId.slice(0, 4) }}</small>
+            </button>
+            <div v-if="!mentionOptions.length" class="mention-empty">没有匹配的成员</div>
+          </div>
+          <button type="button" class="mention-button" title="提及成员" aria-label="提及成员" :aria-expanded="mentionOpen" @click="openMentionMenu">@</button>
+          <textarea ref="composerInput" v-model="draft" maxlength="2000" rows="2" placeholder="说点什么…（Enter 发送，Shift + Enter 换行）" :disabled="status !== 'connected'" @keydown="onKeydown" @input="updateMentionQuery" @click="updateMentionQuery"></textarea>
           <button type="submit" :disabled="status !== 'connected' || !draft.trim()" aria-label="发送">↑</button>
         </form>
         <p v-if="error" class="error-text composer-error">{{ error }}</p>

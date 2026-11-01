@@ -4,6 +4,7 @@ export function useChat() {
   const nickname = ref('')
   const messages = ref([])
   const onlineCount = ref(0)
+  const members = ref([])
   const status = ref('idle')
   const error = ref('')
   const socket = ref(null)
@@ -53,9 +54,11 @@ export function useChat() {
     if (packet.type === 'ready') {
       userId.value = packet.userId
       onlineCount.value = packet.onlineCount
+      members.value = Array.isArray(packet.members) ? packet.members : []
       if (packet.agent) Object.assign(agent, packet.agent)
     } else if (packet.type === 'presence') {
       onlineCount.value = packet.onlineCount
+      members.value = Array.isArray(packet.members) ? packet.members : []
     } else if (packet.type === 'chat') {
       messages.value.push(packet)
       scrollTo('.messages')
@@ -131,7 +134,7 @@ export function useChat() {
     ws.addEventListener('message', (event) => {
       try { handlePacket(JSON.parse(event.data)) } catch { /* 忽略无法解析的包 */ }
     })
-    ws.addEventListener('close', () => { status.value = 'disconnected'; socket.value = null })
+    ws.addEventListener('close', () => { status.value = 'disconnected'; socket.value = null; members.value = [] })
     ws.addEventListener('error', () => { error.value = '连接失败，请检查后端服务'; status.value = 'disconnected' })
     return true
   }
@@ -164,7 +167,7 @@ export function useChat() {
   function disconnect() { socket.value?.close(); socket.value = null; status.value = 'disconnected' }
 
   return {
-    nickname, messages, onlineCount, status, statusLabel, error, userId,
+    nickname, messages, onlineCount, members, status, statusLabel, error, userId,
     agent, agentMessages, agentDraft, agentError, tasks, taskList, activeTasks,
     roomStreams, agentStreams,
     connect, send, sendAgent, stopTask, disconnect,

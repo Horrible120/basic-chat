@@ -22,3 +22,25 @@ def test_connection_manager_count():
     assert manager.count == 1
     manager.remove(client.user_id)
     assert manager.count == 0
+
+
+def test_presence_lists_members_on_join_and_leave(monkeypatch):
+    from fastapi.testclient import TestClient
+    from backend.main import app
+
+    def receive_presence(socket):
+        while True:
+            packet = socket.receive_json()
+            if packet['type'] == 'presence':
+                return packet
+
+    with TestClient(app) as client:
+        with client.websocket_connect('/ws?nickname=Alice') as first:
+            first_ready = first.receive_json()
+            assert first_ready['members'] == [{'userId': first_ready['userId'], 'nickname': 'Alice'}]
+            receive_presence(first)
+            with client.websocket_connect('/ws?nickname=Bob') as second:
+                second_ready = second.receive_json()
+                assert {x['nickname'] for x in second_ready['members']} == {'Alice', 'Bob'}
+                assert {x['nickname'] for x in receive_presence(first)['members']} == {'Alice', 'Bob'}
+            assert [x['nickname'] for x in receive_presence(first)['members']] == ['Alice']

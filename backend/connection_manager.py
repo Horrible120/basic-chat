@@ -21,6 +21,9 @@ class ConnectionManager:
     def count(self) -> int:
         return len(self.connections)
 
+    def members(self) -> list[dict[str, str]]:
+        return [{"userId": client.user_id, "nickname": client.nickname} for client in self.connections.values()]
+
     def add(self, nickname: str, socket: WebSocket) -> Client:
         client = Client(str(uuid4()), nickname, socket)
         self.connections[client.user_id] = client

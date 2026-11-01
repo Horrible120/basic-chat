@@ -71,10 +71,11 @@ async def websocket_chat(websocket: WebSocket, nickname: str = Query(...)) -> No
                 "userId": client.user_id,
                 "nickname": client.nickname,
                 "onlineCount": manager.count,
+                "members": manager.members(),
                 "agent": runtime.public_info(),
             },
         )
-        await manager.broadcast({"type": "presence", "onlineCount": manager.count})
+        await manager.broadcast({"type": "presence", "onlineCount": manager.count, "members": manager.members()})
         await runtime.send_history(client)
 
         while True:
@@ -104,7 +105,7 @@ async def websocket_chat(websocket: WebSocket, nickname: str = Query(...)) -> No
                 await runtime.stop_task(packet.taskId or "", client)
     finally:
         manager.remove(client.user_id)
-        await manager.broadcast({"type": "presence", "onlineCount": manager.count})
+        await manager.broadcast({"type": "presence", "onlineCount": manager.count, "members": manager.members()})
 
 
 if DIST.exists():

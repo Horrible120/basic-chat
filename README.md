@@ -67,3 +67,5 @@ python -m pytest backend/tests -q
 未来需要后端接入大模型和工具，将机器人消息作为共享事件广播，并与前端约定消息和工具事件格式。当前模拟逻辑在 `frontend/src/chatService.js` 和 `frontend/src/composables/useChat.js`，不能代替真实接入。不要在前端保存模型密钥。
 
 前端测试：`node --test frontend/tests/*.test.js`。
+
+前后端对接和待确认事项见 [机器人对接说明](docs/bot-integration.md)。

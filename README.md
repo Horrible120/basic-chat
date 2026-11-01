@@ -60,3 +60,10 @@ python -m pytest backend/tests -q
 
 连接 `/ws?nickname=昵称`。客户端发送 `{ "type": "chat", "content": "消息" }`；服务端发送 `ready`、`chat`、`presence`、`error` 事件。昵称长度为 1–20，消息长度为 1–2000，均按纯文本处理。
 
+## 机器人前端演示
+
+在多人聊天室中发送 `@机器人 你的问题` 或 `@AI 你的问题`，发送者会在自己的浏览器中看到模拟机器人的回复；输入“@机器人 搜索 Vue”可查看模拟工具状态。普通消息仍会广播给聊天室。模拟机器人的回复不会发送到服务器，也不会显示给其他成员。
+
+未来需要后端接入大模型和工具，将机器人消息作为共享事件广播，并与前端约定消息和工具事件格式。当前模拟逻辑在 `frontend/src/chatService.js` 和 `frontend/src/composables/useChat.js`，不能代替真实接入。不要在前端保存模型密钥。
+
+前端测试：`node --test frontend/tests/*.test.js`。

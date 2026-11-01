@@ -34,9 +34,10 @@ function taskStatusLabel(value) {
 <template>
   <main class="page-shell">
     <section v-if="!joined || status === 'idle'" class="welcome-card">
-      <div class="eyebrow">OPEN ROOM · 实时聊天</div>
-      <h1>小小聊天室</h1>
-      <p>输入一个昵称，和正在此刻在线的人聊几句。智能体「{{ agent.name }}」也在房间里，试试 @它。</p>
+      <div class="welcome-mark" aria-hidden="true">✳</div>
+      <div class="eyebrow">A LITTLE SPACE FOR EVERYONE</div>
+      <h1>相遇，从聊天开始<span>。</span></h1>
+      <p>给自己起个名字，和朋友们聊聊此刻的想法。<br>智能体「{{ agent.name }}」也在房间里，试试 @它。</p>
       <form class="join-form" @submit.prevent="join">
         <label for="nickname">你的昵称</label>
         <input id="nickname" v-model="nickname" maxlength="20" autofocus placeholder="例如：小雨" />
@@ -48,7 +49,7 @@ function taskStatusLabel(value) {
     <div v-else class="workspace">
       <section class="chat-card">
         <header class="chat-header">
-          <div><div class="eyebrow">OPEN ROOM</div><h1>小小聊天室</h1></div>
+          <div class="room-heading"><div class="room-icon" aria-hidden="true">✳</div><div><h1>小小聊天室</h1><div class="room-caption">一个分享想法的小空间</div></div></div>
           <div class="presence"><span :class="['status-dot', status]"></span><strong>{{ onlineCount }}</strong> 人在线</div>
         </header>
         <div class="sub-header">

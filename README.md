@@ -90,12 +90,13 @@ Copy-Item .env.example .env
 | `MAX_WORKERS` | `3` | 并行 Worker 上限 |
 | `MAX_STEPS` | `8` | 单个 Worker 的最大工具调用轮数 |
 | `AGENT_ALLOW_WRITE` | `true` | 是否允许内置 Worker 写工作区文件 |
-| `DSH_ENABLED` | `false` | 是否用 DeepSeek Harness 执行任务 |
-| `DSH_COMMAND` | `dsh` | Harness CLI 路径或命令名 |
-| `DSH_PROFILE` | `headless` | Harness profile |
-| `DSH_PROVIDER` | `deepseek-official` | Harness 模型提供方 |
-| `DSH_EXTRA_ARGS` | 空 | 追加给 headless 的参数 |
-| `DSH_TIMEOUT` | `1800` | 单次 Harness 执行超时（秒） |
+| `HARNESS_ENABLED` | `false` | 是否用 DeepSeek Harness 执行任务 |
+| `HARNESS_COMMAND` | `dsh` | Harness CLI 路径或命令名 |
+| `HARNESS_PROFILE` | `headless` | Harness profile |
+| `HARNESS_PROVIDER` | `deepseek-official` | Harness 模型提供方 |
+| `HARNESS_BASE_URL` | 空 | Harness 自定义接口地址，留空用默认值 |
+| `HARNESS_EXTRA_ARGS` | 空 | 追加给 headless 的参数 |
+| `HARNESS_TIMEOUT` | `1800` | 单次 Harness 执行超时（秒） |
 
 Router 默认关闭思考以保证分派速度；Worker 默认开启。DeepSeek 在思考模式下带 `tools` 请求时要求回传 `reasoning_content`，代码已按此处理。
 
@@ -113,16 +114,15 @@ dsh --version
 然后在 `.env` 中设置：
 
 ```ini
-DSH_ENABLED=true
-DSH_COMMAND=dsh
-DSH_PROFILE=headless
+HARNESS_ENABLED=true
+HARNESS_COMMAND=dsh
+HARNESS_PROFILE=headless
 ```
-
 满足条件时，Worker 会调用 `dsh --profile headless --json` 执行任务，获得 Harness 的编码工具、沙箱和会话恢复能力；找不到 `dsh` 时自动回退到内置 Worker。
 
 - 每个任务一个 Harness Session，任务 ID 作为 `--session-id`，同一任务的补充消息继续原会话；
 - 单次 headless 调用只执行一个任务，结束后进程退出，结果通过 NDJSON 事件流回传；
-- 当前 0.2.1-rc.5 的 headless 只支持 `--json` 和 `--session-id`；如果版本支持权限参数，可通过 `DSH_EXTRA_ARGS` 追加。
+- 当前 0.2.1-rc.5 的 headless 只支持 `--json` 和 `--session-id`；如果版本支持权限参数，可通过 `HARNESS_EXTRA_ARGS` 追加。
 
 ### 当前限制
 

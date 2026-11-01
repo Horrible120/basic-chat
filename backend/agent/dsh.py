@@ -90,7 +90,7 @@ class DshBackend:
     ) -> DshResult:
         executable = self._resolve()
         if executable is None:
-            raise DshError("未找到 dsh 命令，请先安装 DeepSeek Harness 或设置 DSH_COMMAND。")
+            raise DshError("未找到 dsh 命令，请先安装 DeepSeek Harness 或设置 HARNESS_COMMAND。")
 
         patch_path = self._model_patch(model) if model else None
         args = ["--profile", self.config.dsh_profile]
@@ -114,8 +114,8 @@ class DshBackend:
                 environment["PATH"] = prefix + os.pathsep + environment.get("PATH", "")
         if self.config.api_key:
             environment["DEEPSEEK_API_KEY"] = self.config.api_key
-        if self.config.base_url:
-            environment["DEEPSEEK_BASE_URL"] = self.config.base_url
+        if self.config.dsh_base_url:
+            environment["DEEPSEEK_BASE_URL"] = self.config.dsh_base_url
         if self.config.dsh_home:
             environment["DSH_HOME"] = self.config.dsh_home
 

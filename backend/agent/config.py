@@ -76,6 +76,7 @@ class AgentConfig:
     dsh_command: str = "dsh"
     dsh_profile: str = "headless"
     dsh_provider: str = "deepseek-official"
+    dsh_base_url: str = ""
     dsh_extra_args: str = ""
     dsh_timeout: float = 1800.0
     dsh_home: str = ""
@@ -105,13 +106,14 @@ class AgentConfig:
             rate_limit=max(1, _int("RATE_LIMIT", 12)),
             rate_window=max(1.0, _float("RATE_WINDOW", 60.0)),
             allow_write=_bool("AGENT_ALLOW_WRITE", True),
-            dsh_enabled=_bool("DSH_ENABLED", False),
-            dsh_command=os.getenv("DSH_COMMAND", "dsh").strip() or "dsh",
-            dsh_profile=os.getenv("DSH_PROFILE", "headless").strip() or "headless",
-            dsh_provider=os.getenv("DSH_PROVIDER", "deepseek-official").strip() or "deepseek-official",
-            dsh_extra_args=os.getenv("DSH_EXTRA_ARGS", "").strip(),
-            dsh_timeout=max(30.0, _float("DSH_TIMEOUT", 1800.0)),
-            dsh_home=os.getenv("DSH_HOME", "").strip(),
+            dsh_enabled=_bool("HARNESS_ENABLED", False),
+            dsh_command=os.getenv("HARNESS_COMMAND", "dsh").strip() or "dsh",
+            dsh_profile=os.getenv("HARNESS_PROFILE", "headless").strip() or "headless",
+            dsh_provider=os.getenv("HARNESS_PROVIDER", "deepseek-official").strip() or "deepseek-official",
+            dsh_base_url=os.getenv("HARNESS_BASE_URL", "").strip(),
+            dsh_extra_args=os.getenv("HARNESS_EXTRA_ARGS", "").strip(),
+            dsh_timeout=max(30.0, _float("HARNESS_TIMEOUT", 1800.0)),
+            dsh_home=os.getenv("HARNESS_HOME", "").strip(),
         )
 
     @property

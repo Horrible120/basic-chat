@@ -249,6 +249,12 @@ def test_dsh_backend_detection():
     assert present.available() is True
 
 
+def test_env_example_avoids_reserved_dsh_prefix():
+    text = (ROOT / ".env.example").read_text(encoding="utf-8")
+    reserved = [line for line in text.splitlines() if line.startswith("DSH_")]
+    assert reserved == []
+
+
 def test_worker_uses_dsh_backend(tmp_path: Path):
     fake = tmp_path / "fake_dsh.py"
     fake.write_text(

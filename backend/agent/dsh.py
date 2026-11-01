@@ -142,9 +142,10 @@ class DshBackend:
         content = ""
         last_text = ""
         captured_session = session_id or ""
+        final_error = ""
 
         async def consume() -> None:
-            nonlocal content, last_text, captured_session
+            nonlocal content, last_text, captured_session, final_error
             async for raw in process.stdout:
                 line = raw.decode("utf-8", "replace").strip()
                 if not line:
@@ -159,6 +160,10 @@ class DshBackend:
                 elif kind == "final":
                     content = str(event.get("text") or content)
                     captured_session = str(event.get("sessionId") or captured_session)
+                    reason = event.get("reason")
+                    if isinstance(reason, dict) and reason.get("kind") == "error":
+                        error = reason.get("error") or {}
+                        final_error = str(error.get("message") or "Harness 执行失败")
                     await self._emit(on_event, DshEvent("final", text=content))
                 elif kind == "text":
                     text = str(event.get("text") or "")
@@ -182,8 +187,13 @@ class DshBackend:
                     detail = output if isinstance(output, str) else json.dumps(output, ensure_ascii=False)
                     await self._emit(on_event, DshEvent("tool_result", name=name, detail=detail[:220]))
                 elif kind == "status":
-                    detail = str(event.get("status") or event.get("message") or "")[:160]
-                    await self._emit(on_event, DshEvent("status", detail=detail))
+                    reason = event.get("reason")
+                    if isinstance(reason, dict) and reason.get("kind") == "error":
+                        error = reason.get("error") or {}
+                        final_error = str(error.get("message") or "Harness 执行失败")
+                    detail = str(event.get("phase") or event.get("status") or event.get("message") or "")[:160]
+                    if detail:
+                        await self._emit(on_event, DshEvent("status", detail=detail))
 
         try:
             async with asyncio.timeout(self.config.dsh_timeout):
@@ -211,6 +221,8 @@ class DshBackend:
         if exit_code != 0:
             tail = stderr.strip().splitlines()[-3:]
             raise DshError(f"dsh 退出码 {exit_code}：{' | '.join(tail)[:500]}")
+        if final_error:
+            raise DshError(f"Harness 任务失败：{final_error[:500]}")
         return DshResult(content=content or last_text, session_id=captured_session, exit_code=exit_code)
 
     @staticmethod

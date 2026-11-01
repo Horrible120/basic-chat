@@ -24,12 +24,13 @@ class ToolCall:
 @dataclass(slots=True)
 class LLMResult:
     content: str = ""
+    reasoning: str = ""
     tool_calls: list[ToolCall] = field(default_factory=list)
 
 
 @dataclass(slots=True)
 class LLMEvent:
-    kind: str  # delta | final
+    kind: str  # delta | reasoning | final
     text: str = ""
     result: LLMResult | None = None
 
@@ -49,6 +50,8 @@ class BaseLLM:
         tools: list[dict] | None = None,
         temperature: float = 0.3,
         max_tokens: int = 1024,
+        thinking: str | None = None,
+        reasoning_effort: str | None = None,
     ) -> AsyncIterator[LLMEvent]:
         raise NotImplementedError
 
@@ -85,20 +88,28 @@ class OpenAICompatibleLLM(BaseLLM):
         tools: list[dict] | None = None,
         temperature: float = 0.3,
         max_tokens: int = 1024,
+        thinking: str | None = None,
+        reasoning_effort: str | None = None,
     ) -> AsyncIterator[LLMEvent]:
         payload: dict = {
             "model": model,
             "messages": messages,
             "stream": True,
-            "temperature": temperature,
             "max_tokens": max_tokens,
         }
+        if thinking:
+            payload["thinking"] = {"type": thinking}
+        if reasoning_effort and thinking != "disabled":
+            payload["reasoning_effort"] = reasoning_effort
+        if thinking != "enabled":
+            payload["temperature"] = temperature
         if tools:
             payload["tools"] = tools
             payload["tool_choice"] = "auto"
         headers = {"Authorization": f"Bearer {self._api_key}", "Content-Type": "application/json"}
 
         content: list[str] = []
+        reasoning_parts: list[str] = []
         calls: dict[int, dict] = {}
         try:
             async with self._get_client().stream("POST", self._url, json=payload, headers=headers) as response:
@@ -121,6 +132,10 @@ class OpenAICompatibleLLM(BaseLLM):
                     if not choices:
                         continue
                     delta = choices[0].get("delta") or {}
+                    reasoning = delta.get("reasoning_content") or delta.get("reasoning")
+                    if isinstance(reasoning, str) and reasoning:
+                        reasoning_parts.append(reasoning)
+                        yield LLMEvent("reasoning", text=reasoning)
                     text = delta.get("content")
                     if text:
                         content.append(text)
@@ -143,7 +158,14 @@ class OpenAICompatibleLLM(BaseLLM):
             for index, slot in sorted(calls.items())
             if slot["name"]
         ]
-        yield LLMEvent("final", result=LLMResult(content="".join(content), tool_calls=tool_calls))
+        yield LLMEvent(
+            "final",
+            result=LLMResult(
+                content="".join(content),
+                reasoning="".join(reasoning_parts),
+                tool_calls=tool_calls,
+            ),
+        )
 
 
 class EchoLLM(BaseLLM):
@@ -159,6 +181,8 @@ class EchoLLM(BaseLLM):
         tools: list[dict] | None = None,
         temperature: float = 0.3,
         max_tokens: int = 1024,
+        thinking: str | None = None,
+        reasoning_effort: str | None = None,
     ) -> AsyncIterator[LLMEvent]:
         text = "（演示模式）还没有配置 LLM_API_KEY。请在项目根目录创建 .env 并填写后重启服务，我就能真正干活了。"
         for index in range(0, len(text), 12):

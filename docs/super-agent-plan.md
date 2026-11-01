@@ -8,6 +8,7 @@
 
 - ✅ **P0 骨架与最小闭环**：DeepSeek 兼容流式客户端、@ 触发过滤、Router 对话、流式回复
 - ✅ **P1 Worker 与任务面板**：并发 Worker、Thread 订阅直通、任务状态/执行记录、停止任务
+- ✅ **P1.5 Harness Worker**：DeepSeek Harness `headless --json` 执行后端、按任务切换 Flash/Pro、思考模式与 `reasoning_content` 兼容
 - ⏳ P2 持久化与链式召回
 - ⏳ P3 主动性与 Watchdog
 - ⏳ P4 外部信道与安全加固
@@ -76,6 +77,7 @@
 | --- | --- | --- |
 | 双层架构 · Router | 单常驻 asyncio 会话 + 有界队列，积压自动合并 | `backend/agent/router.py` |
 | 双层架构 · Worker | 每任务一个隔离会话，`asyncio.Semaphore` 限并发 | `backend/agent/worker.py` |
+| Harness Worker | `dsh --profile headless --json`，按任务写 `--patch` 选择模型 | `backend/agent/dsh.py` |
 | 事件过滤 | 程序规则（@、私聊、白名单）+ LLM 语义判定 | `backend/agent/filters.py` |
 | 订阅与直通 | `Thread → Worker` 映射，命中则绕过 Router | `backend/agent/registry.py` |
 | Inline & Spill / 链式召回 | 注入最近 N 条 + 关联 ID，提供 `read_thread/read_message/read_task` | `backend/agent/context.py` |

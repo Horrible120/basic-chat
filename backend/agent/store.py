@@ -53,7 +53,16 @@ class AgentStore:
         selected = list(ids)[-max(1, limit):]
         return [self._by_id[item] for item in selected if item in self._by_id]
 
-    def create_task(self, *, thread_id: str, channel: str, owner_id: str, title: str, instruction: str) -> Task:
+    def create_task(
+        self,
+        *,
+        thread_id: str,
+        channel: str,
+        owner_id: str,
+        title: str,
+        instruction: str,
+        complexity: str = "light",
+    ) -> Task:
         task = Task(
             id=new_id("task"),
             thread_id=thread_id,
@@ -61,6 +70,7 @@ class AgentStore:
             owner_id=owner_id,
             title=title[:80],
             instruction=instruction[:4000],
+            complexity="heavy" if complexity == "heavy" else "light",
         )
         self.tasks[task.id] = task
         return task

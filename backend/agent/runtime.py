@@ -5,6 +5,7 @@ import time
 from collections import deque
 
 from .config import AgentConfig
+from .dsh import DshBackend
 from .filters import TriggerBuilder
 from .llm import BaseLLM, build_llm
 from .registry import WorkerRegistry
@@ -29,6 +30,7 @@ class AgentRuntime:
         self.manager = manager
         self.store = store or AgentStore()
         self.llm = llm or build_llm(config)
+        self.dsh = DshBackend(config)
         self.filter = TriggerBuilder(config.name)
         self.registry = WorkerRegistry()
         self.queue: asyncio.Queue[Trigger] = asyncio.Queue(maxsize=100)
@@ -67,6 +69,7 @@ class AgentRuntime:
             "demo": self.llm.demo,
             "allowWrite": self.config.allow_write,
             "maxWorkers": self.config.max_workers,
+            "backend": "dsh" if self.dsh.available() else "builtin",
         }
 
     # ---------- 入口 ----------
@@ -250,13 +253,14 @@ class AgentRuntime:
             await self.manager.send_to(owner_id, packet)
 
     # ---------- 任务 ----------
-    async def start_task(self, trigger: Trigger, title: str, instruction: str) -> Task:
+    async def start_task(self, trigger: Trigger, title: str, instruction: str, complexity: str = "light") -> Task:
         task = self.store.create_task(
             thread_id=trigger.thread_id,
             channel=trigger.channel,
             owner_id=trigger.owner_id,
             title=title,
             instruction=instruction,
+            complexity=complexity,
         )
         worker = Worker(self.config, self.llm, self.store, self, task, trigger)
         self.registry.subscribe(task.thread_id, worker)

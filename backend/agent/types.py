@@ -68,6 +68,8 @@ class Task:
     title: str
     instruction: str
     status: str = "queued"
+    complexity: str = "light"
+    dsh_session_id: str = ""
     created_at: str = field(default_factory=now_iso)
     updated_at: str = field(default_factory=now_iso)
     steps: int = 0
@@ -82,6 +84,8 @@ class Task:
             "ownerId": self.owner_id,
             "title": self.title,
             "status": self.status,
+            "complexity": self.complexity,
+            "dshSessionId": self.dsh_session_id,
             "steps": self.steps,
             "result": self.result,
             "error": self.error,
